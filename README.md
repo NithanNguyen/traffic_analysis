@@ -12,6 +12,8 @@ A computer-vision pipeline that detects, tracks, and classifies vehicles from a 
 - **Live analytics dashboard** — on-screen overlay with per-class vehicle counts, average speed, and an occupancy trend chart, rendered with OpenCV and Matplotlib.
 - **Multithreaded video ingestion** — a producer-consumer capture thread decouples frame reading from AI inference, dropping stale frames to keep the pipeline in near real time.
 
+<img width="1852" height="773" alt="Screenshot from 2026-09-04 11-44-14" src="https://github.com/user-attachments/assets/766072dc-35d8-4264-82a8-e881f18f6b02" />
+
 ## Architecture
 
 ```
@@ -105,8 +107,6 @@ Place the fine-tuned model weights (`traffic4.pt`) in the project root. If absen
 - `match_thresh`, `fuse_score`: association matching parameters between detections and existing tracks.
 
 ## Results
-
-<img width="1852" height="773" alt="Screenshot from 2026-09-04 11-44-14" src="https://github.com/user-attachments/assets/766072dc-35d8-4264-82a8-e881f18f6b02" />
 
 - Sustains **~7-9 FPS** on consumer-grade hardware with a discrete laptop GPU.
 - The fine-tuned YOLOv8-Nano model reliably classifies the four target vehicle classes under challenging conditions (night, rain, dense traffic).
