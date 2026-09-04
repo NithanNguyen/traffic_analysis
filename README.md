@@ -15,12 +15,6 @@
 
 Course project for **CS311.Q11 — AI Programming Techniques**.
 
-| Author | Student ID |
-|---|---|
-| Nguyễn Hoàng An | 23520011 |
-| Nguyễn Phạm Thiên Ân | 23520015 |
-| Phan Tiến Đạt | 24520288 |
-
 Manual traffic monitoring does not scale, and congestion decisions need data at the moment congestion happens rather than after the fact. This project targets three measurable outputs from a single fixed camera: vehicle counts by class, movement speed in km/h, and how much of the road surface is actually occupied.
 
 ---
