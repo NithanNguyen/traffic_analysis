@@ -1,4 +1,4 @@
-# Real-Time Traffic Flow Analysis & Vehicle Speed Estimation
+<img width="1852" height="773" alt="Screenshot from 2026-09-04 11-44-14" src="https://github.com/user-attachments/assets/ce0839ef-3c28-4908-b0d3-821214a21349" /># Real-Time Traffic Flow Analysis & Vehicle Speed Estimation
 
 A computer-vision pipeline that detects, tracks, and classifies vehicles from a live (or simulated RTSP) video stream to estimate per-vehicle speed, road occupancy density, and overall traffic state in real time.
 
@@ -105,6 +105,8 @@ Place the fine-tuned model weights (`traffic4.pt`) in the project root. If absen
 - `match_thresh`, `fuse_score`: association matching parameters between detections and existing tracks.
 
 ## Results
+
+<img width="1852" height="773" alt="Screenshot from 2026-09-04 11-44-14" src="https://github.com/user-attachments/assets/766072dc-35d8-4264-82a8-e881f18f6b02" />
 
 - Sustains **~7-9 FPS** on consumer-grade hardware with a discrete laptop GPU.
 - The fine-tuned YOLOv8-Nano model reliably classifies the four target vehicle classes under challenging conditions (night, rain, dense traffic).
