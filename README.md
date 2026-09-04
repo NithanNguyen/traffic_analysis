@@ -106,6 +106,6 @@ Place the fine-tuned model weights (`traffic4.pt`) in the project root. If absen
 
 ## Results
 
-- Sustains **~27–32 FPS** on consumer-grade hardware with a discrete laptop GPU.
+- Sustains **~7-9 FPS** on consumer-grade hardware with a discrete laptop GPU.
 - The fine-tuned YOLOv8-Nano model reliably classifies the four target vehicle classes under challenging conditions (night, rain, dense traffic).
 - The multithreaded capture design keeps end-to-end latency low, maintaining visual synchronization with the live stream.
