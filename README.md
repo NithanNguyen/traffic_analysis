@@ -7,7 +7,7 @@
 [![Tracker](https://img.shields.io/badge/Tracker-ByteTrack-green)](https://github.com/ifzhang/ByteTrack)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-![Live analytics dashboard: annotated traffic video on the left, metrics panel and occupancy trend chart on the right](https://github.com/user-attachments/assets/766072dc-35d8-4264-82a8-e881f18f6b02)
+![Live analytics dashboard](assets/images/dashboard.png)
 
 ---
 
