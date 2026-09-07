@@ -19,9 +19,9 @@
 Manual traffic monitoring does not scale, and congestion decisions need numbers while the congestion is happening. This project produces three of them from a single camera: vehicle counts by class, movement speed in km/h, and how much of the road surface is occupied. Detection is a YOLOv8s model fine-tuned on four Vietnamese traffic classes; tracking is ByteTrack; speed comes from a per-zone homography rather than pixel displacement.
 
 > [!NOTE]
-> Course project for CS311.Q11 (AI Programming Techniques). It analyses one fixed camera at a time. Speed and occupancy zones are hand-aligned point by point in `traffic_config.json` and are only valid for the camera angle they were drawn on. Scope is flow analysis: there is no plate recognition, so individual vehicles are not identified.
+> This project analyses one fixed camera at a time. Speed and occupancy zones are hand-aligned point by point in `traffic_config.json` and are only valid for the camera angle they were drawn on. Scope is flow analysis: there is no plate recognition, so individual vehicles are not identified.
 
-![Live analytics dashboard: annotated video on the left, metric cards and trend chart on the right](assets/images/dashboard.png)
+### DEMO 
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=4xJBgZlyf8E">
@@ -29,7 +29,7 @@ Manual traffic monitoring does not scale, and congestion decisions need numbers 
   </a>
 </p>
 
-The capture predates the current chart panel, which now plots the occupancy trend.
+> Click to watch
 
 ## Pipeline
 
