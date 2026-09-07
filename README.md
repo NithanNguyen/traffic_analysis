@@ -1,203 +1,130 @@
-# Real-Time Traffic Flow Analysis & Vehicle Speed Estimation
+<div align="center">
 
-**Detects, tracks and classifies vehicles from a live RTSP stream to produce per-vehicle speed (km/h), road-occupancy density (%) and a rule-based traffic state, rendered on a live OpenCV dashboard.**
+# Real-Time Traffic Flow Analysis &amp; Vehicle Speed Estimation
 
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
-[![YOLOv8](https://img.shields.io/badge/Detector-YOLOv8--Nano-orange)](https://github.com/ultralytics/ultralytics)
-[![Tracker](https://img.shields.io/badge/Tracker-ByteTrack-green)](https://github.com/ifzhang/ByteTrack)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+**Turns one fixed road camera's RTSP stream into per-vehicle speed in km/h, road occupancy as a percentage of a hand-calibrated ROI, and a seven-state congestion label, rendered live on an OpenCV dashboard.**
 
-![Live analytics dashboard](assets/images/dashboard.png)
+![Ultralytics](https://img.shields.io/badge/Ultralytics-8.3.204-orange)
+![Model](https://img.shields.io/badge/Model-YOLOv8s%20%C2%B7%204%20classes-blue)
+![mAP50](https://img.shields.io/badge/mAP50-0.953-brightgreen)
+![Tracker](https://img.shields.io/badge/Tracker-ByteTrack-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
----
-
-## Context
-
-Course project for **CS311.Q11 — AI Programming Techniques**.
-
-Manual traffic monitoring does not scale, and congestion decisions need data at the moment congestion happens rather than after the fact. This project targets three measurable outputs from a single fixed camera: vehicle counts by class, movement speed in km/h, and how much of the road surface is actually occupied.
+</div>
 
 ---
 
-## Features
+Manual traffic monitoring does not scale, and congestion decisions need numbers while the congestion is happening. This project produces three of them from a single camera: vehicle counts by class, movement speed in km/h, and how much of the road surface is occupied. Detection is a YOLOv8s model fine-tuned on four Vietnamese traffic classes; tracking is ByteTrack; speed comes from a per-zone homography rather than pixel displacement.
 
-- **Multi-class vehicle detection** — car, bus, truck and motorbike, using a YOLOv8-Nano model fine-tuned on a Vietnamese traffic dataset, at a 0.25 confidence threshold.
-- **Multi-object tracking** — persistent IDs via ByteTrack, which associates low-confidence boxes instead of discarding them, keeping tracks alive through partial occlusion.
-- **Speed estimation** — per-zone perspective transform maps the bounding-box ground point into metres; speed is smoothed by an exponential moving average (α = 0.1).
-- **Occupancy density** — aggregate real-world footprint of vehicles inside the ROI divided by the ROI's real area, expressed as a percentage.
-- **Rule-based state classification** — seven states from Empty Road to Traffic Jam, derived from smoothed speed and occupancy.
-- **Multithreaded ingestion** — a producer-consumer capture thread with a bounded queue drops stale frames so the display stays synchronised with the stream.
+> [!NOTE]
+> Course project for CS311.Q11 (AI Programming Techniques). It analyses one fixed camera at a time. Speed and occupancy zones are hand-aligned point by point in `traffic_config.json` and are only valid for the camera angle they were drawn on. Scope is flow analysis: there is no plate recognition, so individual vehicles are not identified.
 
----
+![Live analytics dashboard: annotated video on the left, metric cards and trend chart on the right](assets/images/dashboard.png)
 
-## Architecture
+The capture predates the current chart panel, which now plots the occupancy trend.
+
+## Pipeline
 
 ```text
 RTSP stream
-   └─▶ Threaded video capture  (producer-consumer, queue maxsize=10, drop-oldest)
-         └─▶ YOLOv8 detection + ByteTrack tracking
-               ├─▶ Speed estimator      (perspective transform → EMA filter)
-               ├─▶ Occupancy calculator (Σ vehicle area / ROI area)
-               └─▶ Traffic analytics    (state classification + trend buffer)
-                     └─▶ Dashboard renderer (OpenCV overlay + Matplotlib chart)
+   └─▶ Threaded capture      (producer-consumer, queue maxsize=10, drop-oldest, TCP transport)
+         └─▶ YOLOv8s detection + ByteTrack tracking
+               ├─▶ Speed estimator      (per-zone homography → EMA filter)
+               ├─▶ Occupancy calculator (Σ vehicle footprint / ROI area)
+               └─▶ Traffic analytics    (rolling means → state rules → trend chart)
+                     └─▶ Dashboard renderer (OpenCV overlay + Matplotlib Agg)
 ```
 
-The capture thread exists to solve a throughput mismatch. `cv2.VideoCapture.read()` blocks, and the camera produces frames faster than inference consumes them, so a sequential loop accumulates 2–5 seconds of display lag. Reading on a separate thread into a 10-frame queue that discards its oldest entry when full keeps the processed frame close to the current one. RTSP transport is forced to TCP to avoid packet-loss artifacts.
+The capture thread owns the connection and the queue; the main thread owns all model, analytics and display state. RTSP transport is forced to TCP.
 
----
+## Method
 
-## Methodology
+### Detection and tracking — `traffic4.pt`, `my_tracker.yaml`
 
-### Speed estimation
+`model.track(persist=True, conf=0.25)` over four classes: `bus`, `car`, `motor`, `truck`. Association parameters are in `my_tracker.yaml`; if that file is absent the run falls back to Ultralytics' stock `bytetrack.yaml`, and if `traffic4.pt` is absent it falls back to stock `yolov8n.pt`, which does not have these four classes.
 
-Four source points in pixel space and their real-world rectangle are passed to `cv2.getPerspectiveTransform()` to build a matrix per speed zone. The bottom-centre of each bounding box is taken as the vehicle's ground contact point, mapped into metres, and compared against its previous mapped position. Speed is Euclidean distance over elapsed wall-clock time, converted with `× 3.6`.
+### Speed — per-zone homography
 
-Raw frame-to-frame speed is noisy because bounding boxes jitter and frames are occasionally dropped, so four guards are applied:
+Each speed zone in `traffic_config.json` supplies four pixel points and the real width and length of the rectangle they map to. `cv2.getPerspectiveTransform` builds one matrix per zone. The bounding box's bottom-centre is taken as the ground contact point, mapped to metres, and differenced against its previous mapped position over wall-clock time.
 
-| Guard | Value | Purpose |
-|---|---|---|
-| Minimum time delta | `Δt > 0.02 s` | Avoids division by a near-zero interval |
-| Minimum track age | `> 5 frames` | Suppresses speed output from newly-formed, unstable tracks |
-| Outlier rejection | `> 100 km/h` → hold previous value | Discards spikes caused by ID switches or box jumps |
-| Smoothing | `v = 0.9·v_prev + 0.1·v_new` | EMA filter; removes display flicker |
+Four guards apply:
 
-Track history is discarded when a vehicle leaves the zone, and reset when it crosses into a different zone.
-
-### Occupancy density
-
-Each detected class is assigned a nominal real-world footprint rather than being measured, since bounding-box area in pixels does not translate to road area under perspective:
-
-| Class | Assumed area |
+| Guard | Value |
 |---|---|
-| `motor` | 2 m² |
-| `car` | 8 m² (also the fallback for unmatched classes) |
-| `truck` | 30 m² |
-| `bus` | 35 m² |
+| Minimum time delta | `Δt > 0.02 s` |
+| Minimum track age | `> 5` frames |
+| Outlier rejection | `> 100 km/h` holds the previous value |
+| Smoothing | `v = 0.9·v_prev + 0.1·v_new` |
 
-Occupancy is the sum of footprints for vehicles inside the ROI polygons, divided by the total real area of those polygons, capped at 100 %.
+Track history is deleted when a vehicle leaves every zone and reset when it crosses into a different zone.
 
-### Traffic state classification
+### Occupancy and traffic state
 
-Evaluated on the smoothed average speed and smoothed occupancy, in order; the first matching rule wins.
+Occupancy is the sum of nominal per-class real footprints for vehicles inside the ROI polygons, divided by the total real area of those polygons and capped at 100 %. Footprints are fixed per class in `VEHICLE_REAL_AREAS` (`main.py`), so a compact car and a large SUV contribute the same area.
+
+The displayed state is evaluated on rolling means — the last 50 speed samples above 5 km/h and the last 30 occupancy samples. First matching rule wins:
 
 | Condition | State |
 |---|---|
-| 0 vehicles in ROI and occupancy < 1 % | Empty Road |
-| Speed < 5 km/h and occupancy > 15 % | Stopped / Red Light |
-| Occupancy > 45 % and speed < 20 km/h | Traffic Jam |
+| No vehicles in ROI, occupancy < 1 % | Empty Road |
+| Speed < 5 km/h, occupancy > 15 % | Stopped / Red Light |
+| Occupancy > 45 %, speed < 20 km/h | Traffic Jam |
 | Occupancy > 45 % | High Density |
 | Speed < 25 km/h | Slow Traffic |
 | Occupancy > 15 % | Moderate |
-| Otherwise | Free Flow |
+| otherwise | Free Flow |
 
-The averages are computed over rolling buffers — the last 50 speed samples above 5 km/h, and the last 30 occupancy samples — so the displayed state does not flip on a single frame. The trend chart redraws every 3 seconds over a 30-point history to limit CPU cost.
+## Results
 
----
+Detector, from the validation metrics recorded in `traffic4.pt` (50 epochs, `imgsz=640`, `batch=16`, Ultralytics 8.3.204):
 
-## Tech Stack
+| mAP50 | mAP50-95 | Precision | Recall |
+|---|---|---|---|
+| 0.953 | 0.742 | 0.903 | 0.921 |
 
-| Component | Technology |
-|---|---|
-| Detection | YOLOv8-Nano (Ultralytics), fine-tuned on a Vietnamese traffic dataset |
-| Tracking | ByteTrack |
-| Image and video processing | OpenCV (FFmpeg backend) |
-| Charting | Matplotlib, `Agg` backend |
-| Concurrency | Python `threading` + `queue` |
-| Stream simulation | MediaMTX (RTSP server) + FFmpeg (looped publisher) |
+> The training set is not distributed with this repository, so these figures have no image or instance denominator here and cannot be reproduced from the repo alone. Behaviour in heavy rain, fog and severe occlusion is unmeasured.
 
----
+End to end the pipeline runs at roughly 7–9 FPS, read from the FPS counter in the dashboard capture above. The host hardware for that capture was not recorded: `<RUNTIME_HARDWARE>`.
 
 ## Requirements
 
 | Requirement | Notes |
 |---|---|
-| Python | 3.9 or newer |
-| GPU | Optional; CUDA is used automatically when available |
-| MediaMTX | Only needed to simulate an RTSP source from a local video file |
-| FFmpeg | Only needed to publish that file to the RTSP server |
-| Model weights | `traffic4.pt` in the project root; falls back to stock `yolov8n.pt` if absent |
+| Python | Not pinned anywhere in the repository: `<PYTHON_VERSION>` |
+| Packages | `ultralytics`, `opencv-python`, `numpy`, `matplotlib` |
+| GPU | Optional; Ultralytics selects CUDA when it is available |
+| Weights | `traffic4.pt` at the repository root |
+| RTSP source | `tools/mediamtx.exe` is committed and is a Windows build; FFmpeg is not committed |
 
----
+## Quick start
 
-## Quick Start
+> [!WARNING]
+> `main.py` loads the calibration stored under the literal key `"TestVideo3.mp4"`, whatever the stream actually carries. Publish that video, or change the key in the `load_config_from_json` call, or add a matching entry to `traffic_config.json`. `test.py` is the same pipeline pinned to `"TestVideo1.mp4"`.
 
 ```bash
 git clone https://github.com/NithanNguyen/traffic_analysis.git && cd traffic_analysis
 pip install ultralytics opencv-python numpy matplotlib
-cd tools && ./mediamtx        # terminal 1: start the RTSP server
-./ffmpeg -re -stream_loop -1 -i TestVideo1.mp4 -c:v copy -rtsp_transport tcp -f rtsp rtsp://localhost:8554/live_stream   # terminal 2
-python main.py                # terminal 3
+cd tools && ./mediamtx.exe                                          # terminal 1
+ffmpeg -re -stream_loop -1 -i <VIDEO>.mp4 -c:v copy -rtsp_transport tcp -f rtsp rtsp://localhost:8554/live_stream   # terminal 2
+python main.py                                                      # terminal 3
 ```
 
-Press `q` in the display window to exit. Place the MediaMTX and FFmpeg executables under `tools/` and the test videos under `video/` — neither is distributed with the repository.
+Press `q` in the display window to exit.
 
----
-
-## Repository Structure
+## Repository structure
 
 ```
 traffic_analysis/
-├── main.py               # Entry point: RTSP → detection/tracking → analytics → dashboard
-├── test.py               # Experimental variant of main.py, different default config key
-├── my_tracker.yaml       # ByteTrack parameters
-├── traffic_config.json   # Per-video speed and occupancy zone calibration
-├── traffic4.pt           # Fine-tuned YOLOv8 weights (supplied separately)
-├── tools/                # MediaMTX and FFmpeg binaries (ffmpeg.exe is git-ignored)
-└── video/                # Source test videos (*.mp4 is git-ignored)
+├── main.py               # Entry point: threaded RTSP capture → track → analytics → dashboard
+├── test.py               # Same pipeline, pinned to the "TestVideo1.mp4" calibration key
+├── traffic4.pt           # Fine-tuned YOLOv8s weights, 4 classes
+├── traffic_config.json   # Speed and occupancy zone geometry, keyed by video filename
+├── my_tracker.yaml       # ByteTrack association parameters
+├── LICENSE               # MIT
+├── assets/images/        # Dashboard capture used above
+├── output/run35/         # Recorded annotated run
+└── tools/                # MediaMTX Windows binary and its default configuration
 ```
-
----
-
-## Configuration
-
-**`traffic_config.json`** — keyed by video filename. Each key holds two lists:
-
-| Field | Meaning |
-|---|---|
-| `speed_zones[].points` | Four pixel coordinates defining the zone quadrilateral |
-| `speed_zones[].real_w` / `real_h` | Real dimensions in metres, used to build the perspective matrix |
-| `occupancy_zones[].points` | ROI polygon in pixel coordinates |
-| `occupancy_zones[].real_w` / `real_h` | Real dimensions in metres, used as the occupancy denominator |
-
-**`my_tracker.yaml`** — ByteTrack association parameters:
-
-| Parameter | Effect |
-|---|---|
-| `track_high_thresh` / `track_low_thresh` | Confidence bands for initialising versus retaining a track |
-| `new_track_thresh` | Minimum confidence to spawn a new track ID |
-| `track_buffer` | Frames a lost track is kept before deletion |
-| `match_thresh`, `fuse_score` | Detection-to-track association matching |
-
-**Constants in `main.py`** — `SHOW_SPEED_ZONES` and `SHOW_OCCUPANCY_ZONES` toggle the zone overlays; `TARGET_HEIGHT` (720) and `DASHBOARD_WIDTH` (450) set the display geometry; `VEHICLE_REAL_AREAS` holds the per-class footprints listed above.
-
----
-
-## Results
-
-**Performance.** The pipeline sustains roughly 7–9 FPS end to end on consumer hardware with a discrete laptop GPU. Perceived latency stays low because the capture thread discards stale frames rather than queueing them, so the displayed frame tracks the live stream even when inference falls behind the source frame rate.
-
-**Detection.** The fine-tuned YOLOv8-Nano model separates the four target classes under night, rain and dense-traffic conditions. No quantitative evaluation (mAP, precision/recall per class) was run, so this is a qualitative observation from the demo footage rather than a measured result.
-
----
-
-## Limitations
-
-- **Manual calibration.** Speed and occupancy zones are hand-aligned point by point. Any change in camera angle invalidates the perspective matrices and requires re-calibration.
-- **Hardcoded configuration key.** `main.py` loads zones for the literal key `"TestVideo3.mp4"` while streaming from the RTSP URL; `test.py` uses `"TestVideo1.mp4"`. Running against a different source requires editing the call or adding a matching key to `traffic_config.json`.
-- **Assumed vehicle footprints.** Occupancy uses fixed per-class areas, so a compact car and a large SUV contribute identically.
-- **Environmental degradation.** Detection accuracy drops in heavy rain, dense fog and severe occlusion.
-- **No edge deployment.** The model is not quantised or pruned, so it is not suited to low-power embedded hardware as-is.
-- **Flow analysis only.** There is no licence-plate recognition (ANPR), so individual vehicles cannot be identified.
-
----
-
-## Roadmap
-
-1. **Edge deployment** — quantisation and pruning to run on embedded devices at lower cost and latency.
-2. **Auto-calibration** — lane-detection to place and align ROI zones without manual point selection.
-3. **Centralised management** — a web application and database aggregating historical data across multiple cameras.
-
----
 
 ## Acknowledgements
 
@@ -205,4 +132,4 @@ Built on [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics), [Byte
 
 ## License
 
-Released under the MIT License.
+This repository's source is released under the MIT License; see [`LICENSE`](LICENSE). The `traffic4.pt` checkpoint was produced with Ultralytics, whose metadata it carries and which is distributed under AGPL-3.0 — check [Ultralytics licensing](https://www.ultralytics.com/license) before reusing the weights.
