@@ -4,17 +4,17 @@
 
 **Turns one fixed road camera's RTSP stream into per-vehicle speed in km/h, road occupancy as a percentage of a hand-calibrated ROI, and a seven-state congestion label, rendered live on an OpenCV dashboard.**
 
-![Ultralytics](https://img.shields.io/badge/Ultralytics-8.3.204-orange)
 ![Model](https://img.shields.io/badge/Model-YOLOv8s%20%C2%B7%204%20classes-blue)
+![Trained with](https://img.shields.io/badge/Trained%20with-Ultralytics%208.3.204-orange)
 ![mAP50](https://img.shields.io/badge/mAP50-0.953-brightgreen)
 ![Tracker](https://img.shields.io/badge/Tracker-ByteTrack-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 </div>
 
-### DEMO
-
 ---
+
+## Overview
 
 Manual traffic monitoring does not scale, and congestion decisions need numbers while the congestion is happening. This project produces three of them from a single camera: vehicle counts by class, movement speed in km/h, and how much of the road surface is occupied. Detection is a YOLOv8s model fine-tuned on four Vietnamese traffic classes; tracking is ByteTrack; speed comes from a per-zone homography rather than pixel displacement.
 
@@ -37,19 +37,29 @@ RTSP stream
                      └─▶ Dashboard renderer (OpenCV overlay + Matplotlib Agg)
 ```
 
-The capture thread owns the connection and the queue; the main thread owns all model, analytics and display state. RTSP transport is forced to TCP.
+| Thread | Owns | Behaviour |
+|---|---|---|
+| Capture | RTSP connection, frame queue | Discards the oldest frame when the queue is full; RTSP transport forced to TCP |
+| Main | Model, tracker state, analytics buffers, display | Consumes one frame per iteration, 1 s read timeout |
 
 ## Method
 
 ### Detection and tracking — `traffic4.pt`, `my_tracker.yaml`
 
-`model.track(persist=True, conf=0.25)` over four classes: `bus`, `car`, `motor`, `truck`. Association parameters are in `my_tracker.yaml`; if that file is absent the run falls back to Ultralytics' stock `bytetrack.yaml`, and if `traffic4.pt` is absent it falls back to stock `yolov8n.pt`, which does not have these four classes.
+| Role | Choice | Fallback when the file is absent |
+|---|---|---|
+| Detector | `traffic4.pt` — YOLOv8s fine-tuned on `bus`, `car`, `motor`, `truck` | Stock `yolov8n.pt`, which does not carry these four classes |
+| Tracker | `my_tracker.yaml` — ByteTrack association parameters | Ultralytics stock `bytetrack.yaml` |
+| Inference call | `model.track(persist=True, conf=0.25)` | — |
+
+Counting is per unique track ID on first entry into an occupancy ROI.
 
 ### Speed — per-zone homography
 
-Each speed zone in `traffic_config.json` supplies four pixel points and the real width and length of the rectangle they map to. `cv2.getPerspectiveTransform` builds one matrix per zone. The bounding box's bottom-centre is taken as the ground contact point, mapped to metres, and differenced against its previous mapped position over wall-clock time.
-
-Four guards apply:
+1. Each speed zone in `traffic_config.json` supplies four pixel points plus the real width and length of the rectangle they map to; `cv2.getPerspectiveTransform` builds one matrix per zone.
+2. The bounding box's bottom-centre is taken as the ground contact point.
+3. That point is mapped to metres and differenced against its previous mapped position over wall-clock time.
+4. Track history is deleted when a vehicle leaves every zone, and reset when it crosses into a different zone.
 
 | Guard | Value |
 |---|---|
@@ -58,13 +68,11 @@ Four guards apply:
 | Outlier rejection | `> 100 km/h` holds the previous value |
 | Smoothing | `v = 0.9·v_prev + 0.1·v_new` |
 
-Track history is deleted when a vehicle leaves every zone and reset when it crosses into a different zone.
-
 ### Occupancy and traffic state
 
-Occupancy is the sum of nominal per-class real footprints for vehicles inside the ROI polygons, divided by the total real area of those polygons and capped at 100 %. Footprints are fixed per class in `VEHICLE_REAL_AREAS` (`main.py`), so a compact car and a large SUV contribute the same area.
-
-The displayed state is evaluated on rolling means — the last 50 speed samples above 5 km/h and the last 30 occupancy samples. First matching rule wins:
+- Occupancy is the sum of nominal per-class real footprints for vehicles inside the ROI polygons, divided by the total real area of those polygons, capped at 100 %.
+- Footprints are fixed per class in `VEHICLE_REAL_AREAS` (`main.py`), so a compact car and a large SUV contribute the same area.
+- The displayed state is evaluated on rolling means — the last 50 speed samples above 5 km/h and the last 30 occupancy samples. First matching rule wins.
 
 | Condition | State |
 |---|---|
@@ -78,15 +86,19 @@ The displayed state is evaluated on rolling means — the last 50 speed samples 
 
 ## Results
 
-Detector, from the validation metrics recorded in `traffic4.pt` (50 epochs, `imgsz=640`, `batch=16`, Ultralytics 8.3.204):
-
 | mAP50 | mAP50-95 | Precision | Recall |
 |---|---|---|---|
 | 0.953 | 0.742 | 0.903 | 0.921 |
 
-> The training set is not distributed with this repository, so these figures have no image or instance denominator here and cannot be reproduced from the repo alone. Behaviour in heavy rain, fog and severe occlusion is unmeasured.
+> Read from the validation metrics stored inside `traffic4.pt` (50 epochs, `imgsz=640`, `batch=16`, Ultralytics 8.3.204, checkpoint dated 2025-11-30). The training set is not distributed with this repository, so these figures carry no image or instance denominator here. Behaviour in heavy rain, fog and severe occlusion is unmeasured.
 
-End to end the pipeline runs at roughly 7–9 FPS, read from the FPS counter in the dashboard capture above. The host hardware for that capture was not recorded: `<RUNTIME_HARDWARE>`.
+| Runtime | Value |
+|---|---|
+| End-to-end throughput | ~7–9 FPS |
+| Display resolution | 1730 × 720 |
+| Host hardware | `<RUNTIME_HARDWARE>` |
+
+> Throughput is read from the on-screen FPS counter, not from an instrumented benchmark. Sampling the committed recording `output/run35/analytics_TestVideo1.mp4` at eleven points gives 7–8. The host was not recorded, so the figure is not comparable across machines.
 
 ## Requirements
 
@@ -124,9 +136,13 @@ traffic_analysis/
 ├── my_tracker.yaml       # ByteTrack association parameters
 ├── LICENSE               # MIT
 ├── assets/images/        # Dashboard capture used above
-├── output/run35/         # Recorded annotated run
+├── output/run35/         # Recorded annotated run, source of the throughput figure
 └── tools/                # MediaMTX Windows binary and its default configuration
 ```
+
+## Authors
+
+Nguyễn Hoàng An · Nguyễn Phạm Thiên Ân · Phan Tiến Đạt — CS311.Q11, AI Programming Techniques.
 
 ## Acknowledgements
 
@@ -134,4 +150,5 @@ Built on [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics), [Byte
 
 ## License
 
-This repository's source is released under the MIT License; see [`LICENSE`](LICENSE). The `traffic4.pt` checkpoint was produced with Ultralytics, whose metadata it carries and which is distributed under AGPL-3.0 — check [Ultralytics licensing](https://www.ultralytics.com/license) before reusing the weights.
+- This repository's source is released under the MIT License; see [`LICENSE`](LICENSE).
+- The `traffic4.pt` checkpoint was produced with Ultralytics, whose metadata it carries and which is distributed under AGPL-3.0 — check [Ultralytics licensing](https://www.ultralytics.com/license) before reusing the weights.
