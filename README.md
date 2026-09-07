@@ -12,6 +12,10 @@
 
 </div>
 
+### DEMO
+
+https://github.com/user-attachments/assets/ac35e4c5-b500-4eab-943c-13a08d130577
+
 ---
 
 Manual traffic monitoring does not scale, and congestion decisions need numbers while the congestion is happening. This project produces three of them from a single camera: vehicle counts by class, movement speed in km/h, and how much of the road surface is occupied. Detection is a YOLOv8s model fine-tuned on four Vietnamese traffic classes; tracking is ByteTrack; speed comes from a per-zone homography rather than pixel displacement.
