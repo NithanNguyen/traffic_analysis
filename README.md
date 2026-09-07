@@ -23,6 +23,12 @@ Manual traffic monitoring does not scale, and congestion decisions need numbers 
 
 ![Live analytics dashboard: annotated video on the left, metric cards and trend chart on the right](assets/images/dashboard.png)
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=4xJBgZlyf8E">
+    <img src="https://img.youtube.com/vi/4xJBgZlyf8E/maxresdefault.jpg" alt="Xem Video Demo" width="100%">
+  </a>
+</p>
+
 The capture predates the current chart panel, which now plots the occupancy trend.
 
 ## Pipeline
