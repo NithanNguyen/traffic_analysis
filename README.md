@@ -27,6 +27,8 @@ Manual traffic monitoring does not scale, and congestion decisions need numbers 
   <a href="https://www.youtube.com/watch?v=4xJBgZlyf8E">
     <img src="https://img.youtube.com/vi/4xJBgZlyf8E/maxresdefault.jpg" alt="Xem Video Demo" width="100%">
   </a>
+  <br>
+  <em>Click to watch the Demo video</em>
 </p>
 
 > Click to watch
