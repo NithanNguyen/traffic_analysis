@@ -136,7 +136,6 @@ traffic_analysis/
 ├── my_tracker.yaml       # ByteTrack association parameters
 ├── LICENSE               # MIT
 ├── assets/images/        # Dashboard capture used above
-├── output/run35/         # Recorded annotated run, source of the throughput figure
 └── tools/                # MediaMTX Windows binary and its default configuration
 ```
 
