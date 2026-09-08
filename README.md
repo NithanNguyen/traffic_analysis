@@ -149,9 +149,9 @@ traffic_analysis/
 
 ## Authors
 
-Nguyễn Hoàng An · Nguyễn Phạm Thiên Ân · Phan Tiến Đạt — Course project: AI Programming Techniques.
+Nguyễn Phạm Thiên Ân · Nguyễn Hoàng An · Phan Tiến Đạt — Course project: AI Programming Techniques.
 
-### My Contributions — Nguyễn Hoàng An
+### My Contributions
 
 | # | Task | Description | Artifacts |
 |---|------|-------------|-----------|
