@@ -149,7 +149,15 @@ traffic_analysis/
 
 ## Authors
 
-Nguyễn Hoàng An · Nguyễn Phạm Thiên Ân · Phan Tiến Đạt — CS311.Q11, AI Programming Techniques.
+Nguyễn Hoàng An · Nguyễn Phạm Thiên Ân · Phan Tiến Đạt — Course project: AI Programming Techniques.
+
+### My Contributions — Nguyễn Hoàng An
+
+| # | Task | Description | Artifacts |
+|---|------|-------------|-----------|
+| 1 | **Vehicle Detection Model Training** | Fine-tuned a YOLOv8s detector on four Vietnamese traffic classes (`bus`, `car`, `motor`, `truck`) and validated it against mAP50, mAP50-95, precision and recall. | `traffic4.pt` |
+| 2 | **Homography-based Vehicle Speed Estimation** | Surveyed published speed-estimation methods, then implemented per-zone perspective transformation mapping the bounding-box ground contact point to metric coordinates, with exponential moving average smoothing, minimum-track-age gating and outlier rejection. | `main.py`, `traffic_config.json` |
+| 3 | **Traffic State Classification Logic & Visualization Dashboard** | Designed the rule-based inference that derives a seven-state congestion label from rolling means of speed and road occupancy, and the real-time OpenCV dashboard rendering counts, speed, occupancy and trend charts. | `main.py` |
 
 ## Acknowledgements
 
